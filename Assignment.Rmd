@@ -1,0 +1,200 @@
+# Set working directory (update if needed)
+setwd("/Users/lolitha/Desktop/Assignment")
+
+library(readxl)
+library(dplyr)
+library(tibble)
+library(stringr)
+library(arules)
+library(arulesViz)
+
+# Load dataset
+data <- read_excel("Online Retail.xlsx")
+
+# Preview dataset
+head(data)
+dim(data)
+names(data)
+
+
+########################################### DATASET ANAYLSIS ###########################################################
+
+# 1. Missing values
+colSums(is.na(data))
+
+#InvoiceNo   StockCode Description    Quantity InvoiceDate   UnitPrice  CustomerID     Country 
+#          0           0        1454           0           0           0      135080           0 
+
+# --- CustomerID is missing from 135080 transactions and Description is missing from 1454 transactions
+
+# 2. Check "Country" coloumn contains only valid contries
+
+unique_countries <- unique(data$Country)
+print(unique_countries)
+
+#  --- There seems to be Country with value "Unspecified" , check the dataset for any transactions with this value.
+
+unspecified_transactions <- data %>%
+  filter(Country == "Unspecified")
+nrow(unspecified_transactions)
+
+#  --- 446 transactions with "Unspecified" as the country
+
+# 3. Find the data types of the data set
+
+str(data)
+
+# --- Data types seems to be correct , InvoiceDate has data type POSIXct , UnitPrice and Quantity is is numeric.
+
+# 4.Find the Distribution analysis, statistical exploration, correlation analysis of numeric coloumn
+
+summary(data)
+
+# --- Quantity field and Unit Price seems to have minus values
+
+# Single box plot for Quantity
+boxplot(data$Quantity, main = "Boxplot of Quantity", ylab = "Quantity")
+
+# Single box plot for UnitPrice
+boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price") 
+
+# --- There seems to be few outliers in the Quantity and UnitPrice remove those.
+
+
+########################################### CLEAN DATASET ###########################################################
+
+
+# 1. Remove Customer ID null transactions
+
+data <- data %>%
+  filter(!is.na(CustomerID))
+  
+colSums(is.na(data))
+
+# --- This seems to remove Description null transactions as well. 
+
+# 2. Remove negative values from UnitPrice and Quantity fields.
+
+data <- data %>%
+  filter(Quantity >= 0, UnitPrice >= 0)
+
+# Generate the new box plots
+
+# Single box plot for Quantity
+boxplot(data$Quantity, main = "Boxplot of Quantity", ylab = "Quantity")
+
+# Single box plot for UnitPrice
+boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price") 
+
+# Check the new min / max values of the data set
+
+summary(data)
+
+# --- Remove the outliers 80995.00 value from Quantity and 8142.750 valye form Unit price
+data <- data %>%
+  filter(Quantity < 10000.00)
+  
+data <- data %>%
+  filter(UnitPrice != 8142.750)
+
+# Single box plot for Quantity
+boxplot(data$Quantity, main = "Boxplot of Quantity", ylab = "Quantity")
+
+# Single box plot for UnitPrice
+boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price") 
+  
+#write.csv(clean_data, "cleaned_data.csv", row.names = FALSE)
+
+# 3. Remove cancelled transactions 
+data <- data %>%
+  filter(!grepl("C", InvoiceNo))
+  
+# 4. Remove non product stock code transactions.
+
+bad_codes <- c('BANK CHARGES', 'POST', 'DOT', 'M', 'PADS', 'C2')
+
+data <- data %>%
+  filter(!(StockCode %in% bad_codes))
+
+########################################### GROUP DATASET ACCORDING TO COUNTRIES ###########################################################
+
+# Find top three countries (using unique InvoiceNo)
+top_countries <- data %>%
+  distinct(Country, InvoiceNo) %>%
+  count(Country, sort = TRUE) %>%
+  slice_head(n = 3) %>%
+  pull(Country)
+  
+print(top_countries)
+
+# Filter the original dataset for those top 3 countries
+top_3_country_transactions_data_set <- data %>%
+  filter(Country %in% top_countries)
+
+# Count the tranactions for each country
+country_transaction_counts <- top_3_country_transactions_data_set %>%
+  distinct(Country, InvoiceNo) %>% 
+  count(Country, name = "TransactionCount") %>%
+  arrange(desc(TransactionCount))
+
+print(country_transaction_counts)
+
+
+######################################################### RUN APRIRORI FOR EACH COUNTRY  ################################################
+
+for (country in top_countries) {
+  cat("\n=====================\n")
+  cat("Running Apriori for:", country, "\n")
+  cat("=====================\n")
+  
+# Filter for country
+  country_data <- data %>%
+    filter(Country == country) %>%
+    distinct(InvoiceNo, StockCode)
+  
+# Convert to transaction list and transactions object
+  trans_list <- split(country_data$StockCode, country_data$InvoiceNo)
+  transactions <- as(trans_list, "transactions")
+  
+# Run Apriori
+  rules <- apriori(transactions, parameter = list(supp = 0.01, conf = 0.5))
+  
+# Print readable rules
+  if (length(rules) == 0) {
+    cat("No rules found for", country, "\n")
+  } else {
+    # Convert rules to data frame
+    rule_df <- as(rules, "data.frame")
+    rule_df$LHS_Desc <- get_descriptions(lhs(rules), stock_map)
+    rule_df$RHS_Desc <- get_descriptions(rhs(rules), stock_map)
+    
+    cat("\nTop 10 rules by lift for", country, ":\n")
+    print(rule_df %>%
+      select(LHS_Desc, RHS_Desc, support, confidence, lift) %>%
+      arrange(desc(lift)) %>%
+      head(10))
+  }
+}
+
+# Create stock_map
+stock_map <- data %>%
+  select(StockCode, Description) %>%
+  distinct(StockCode, .keep_all = TRUE)
+  
+# Function to get item description
+get_descriptions <- function(items, mapping) {
+  item_labels <- labels(items)
+  item_strings <- sapply(item_labels, function(x) {
+    codes <- gsub("[\\{\\}]", "", x)             # Remove curly braces
+    code_list <- unlist(strsplit(codes, ","))    # Split codes
+    desc_list <- sapply(code_list, function(code) {
+      desc <- mapping$Description[mapping$StockCode == trimws(code)]
+      if (length(desc) > 0) return(desc[1]) else return(code)
+    })
+    paste(desc_list, collapse = ", ")
+  })
+  return(item_strings)
+}
+
+
+  
