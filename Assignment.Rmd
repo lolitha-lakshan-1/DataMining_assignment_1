@@ -18,7 +18,6 @@ head(data)
 dim(data)
 names(data)
 
-
 ########################################### DATASET ANAYLSIS ###########################################################
 
 # 1. Missing values
@@ -62,20 +61,9 @@ boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price")
 
 # --- There seems to be few outliers in the Quantity and UnitPrice remove those.
 
-
 ########################################### CLEAN DATASET ###########################################################
 
-
-# 1. Remove Customer ID null transactions
-
-data <- data %>%
-  filter(!is.na(CustomerID))
-  
-colSums(is.na(data))
-
-# --- This seems to remove Description null transactions as well. 
-
-# 2. Remove negative values from UnitPrice and Quantity fields.
+# 1. Remove negative values from UnitPrice and Quantity fields.
 
 data <- data %>%
   filter(Quantity >= 0, UnitPrice >= 0)
@@ -92,7 +80,7 @@ boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price")
 
 summary(data)
 
-# --- Remove the outliers 80995.00 value from Quantity and 8142.750 valye form Unit price
+# --- Do not remove the outliers 80995.00 value from Quantity and 8142.750 valye form Unit price
 # --- No need to  remove  for Market Basket analysis as ,
 
 #The Apriori algorithm works on binary presence/absence of items in transactions, not on quantities or prices. For example:
@@ -101,32 +89,18 @@ summary(data)
 #Transaction 2: Bread, Eggs
 #Even if a customer buys 10 loaves of bread, it's still treated as: "Bread was bought."
 
-#data <- data %>%
-#filter(Quantity < 10000.00)
-  
-#data <- data %>%
-#filter(UnitPrice != 8142.750)
-
-# Single box plot for Quantity
-#boxplot(data$Quantity, main = "Boxplot of Quantity", ylab = "Quantity")
-
-# Single box plot for UnitPrice
-#boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price") 
-  
-#write.csv(clean_data, "cleaned_data.csv", row.names = FALSE)
-
-# 3. Remove cancelled transactions 
+# 2. Remove cancelled transactions 
 data <- data %>%
   filter(!grepl("C", InvoiceNo))
   
-# 4. Remove non product stock code transactions.
+# 3. Remove non product stock code transactions.
 
 bad_codes <- c('BANK CHARGES', 'POST', 'DOT', 'M', 'PADS', 'C2')
 
 data <- data %>%
   filter(!(StockCode %in% bad_codes))
   
-########################################### FIND ANY FEATURES CORELLATIONS ############################################
+########################################### FIND ANY FEATURE CORELLATIONS ############################################
 
 numeric_data <- data %>%
   select(where(is.numeric)) 
@@ -168,42 +142,7 @@ country_transaction_counts <- top_3_country_transactions_data_set %>%
 
 print(country_transaction_counts)
 
-
 ######################################################### RUN APRIRORI FOR EACH COUNTRY  ################################################
-
-for (country in top_countries) {
-  cat("\n=====================\n")
-  cat("Running Apriori for:", country, "\n")
-  cat("=====================\n")
-  
-# Filter for country
-  country_data <- data %>%
-    filter(Country == country) %>%
-    distinct(InvoiceNo, StockCode)
-  
-# Convert to transaction list and transactions object
-  trans_list <- split(country_data$StockCode, country_data$InvoiceNo)
-  transactions <- as(trans_list, "transactions")
-  
-# Run Apriori
-  rules <- apriori(transactions, parameter = list(supp = 0.01, conf = 0.5))
-  
-# Print readable rules
-  if (length(rules) == 0) {
-    cat("No rules found for", country, "\n")
-  } else {
-    # Convert rules to data frame
-    rule_df <- as(rules, "data.frame")
-    rule_df$LHS_Desc <- get_descriptions(lhs(rules), stock_map)
-    rule_df$RHS_Desc <- get_descriptions(rhs(rules), stock_map)
-    
-    cat("\nTop 10 rules by lift for", country, ":\n")
-    print(rule_df %>%
-      select(LHS_Desc, RHS_Desc, support, confidence, lift) %>%
-      arrange(desc(lift)) %>%
-      head(10))
-  }
-}
 
 # Create stock_map
 stock_map <- data %>%
@@ -224,6 +163,37 @@ get_descriptions <- function(items, mapping) {
   })
   return(item_strings)
 }
-
-
   
+for (country in top_countries) {
+  cat("\n=====================\n")
+  cat("Running Apriori for:", country, "\n")
+  cat("=====================\n")
+  
+# Filter for country
+  country_data <- data %>%
+    filter(Country == country) %>%
+    distinct(InvoiceNo, StockCode)
+  
+# Convert to transaction list and transactions object
+  trans_list <- split(country_data$StockCode, country_data$InvoiceNo)
+  transactions <- as(trans_list, "transactions")
+  
+# Run Apriori
+  rules <- apriori(transactions, parameter = list(supp = 0.01, conf = 0.5, minlen = 2))
+  
+# Print readable rules
+  if (length(rules) == 0) {
+    cat("No rules found for", country, "\n")
+  } else {
+    # Convert rules to data frame
+    rule_df <- as(rules, "data.frame")
+    rule_df$LHS_Desc <- get_descriptions(lhs(rules), stock_map)
+    rule_df$RHS_Desc <- get_descriptions(rhs(rules), stock_map)
+    
+    cat("\nTop 10 rules by lift for", country, ":\n")
+    print(rule_df %>%
+      select(LHS_Desc, RHS_Desc, support, confidence, lift) %>%
+      arrange(desc(lift)) %>%
+      head(20))
+  }
+}
