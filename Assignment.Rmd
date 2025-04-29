@@ -61,6 +61,12 @@ boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price")
 
 # --- There seems to be few outliers in the Quantity and UnitPrice remove those.
 
+# 5. Get tehe unique values
+
+unique_values <- unique(data$StockCode)
+long_names <- unique(data$StockCode[nchar(data$StockCode) > 6])
+print(long_names)
+
 ########################################### CLEAN DATASET ###########################################################
 
 # 1. Remove negative values from UnitPrice and Quantity fields.
