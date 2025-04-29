@@ -181,6 +181,8 @@ for (country in top_countries) {
 # Run Apriori
   rules <- apriori(transactions, parameter = list(supp = 0.01, conf = 0.5, minlen = 2))
   
+  rules <- sort(rules, by = "lift", decreasing = TRUE)
+  
 # Print readable rules
   if (length(rules) == 0) {
     cat("No rules found for", country, "\n")
