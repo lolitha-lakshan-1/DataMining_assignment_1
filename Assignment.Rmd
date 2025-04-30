@@ -200,7 +200,7 @@ for (country in top_countries) {
   transactions <- as(trans_list, "transactions")
   
 # Run Apriori
-  rules <- apriori(transactions, parameter = list(supp = 0.01, conf = 0.5, minlen = 2))
+  rules <- apriori(transactions, parameter = list(supp = 0.01, conf = 0.5))
   
   rules <- sort(rules, by = "lift", decreasing = TRUE)
   
@@ -217,6 +217,6 @@ for (country in top_countries) {
     print(rule_df %>%
       select(LHS_Desc, RHS_Desc, support, confidence, lift) %>%
       arrange(desc(lift)) %>%
-      head(20))
+      head(10))
   }
 }
