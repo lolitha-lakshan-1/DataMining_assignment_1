@@ -59,9 +59,12 @@ boxplot(data$Quantity, main = "Boxplot of Quantity", ylab = "Quantity")
 # Single box plot for UnitPrice
 boxplot(data$UnitPrice, main = "Boxplot of Unit Price", ylab = "Unit Price") 
 
+print(sum(data$UnitPrice < 0))
+print(sum(data$Quantity < 0))
+
 # --- There seems to be few outliers in the Quantity and UnitPrice remove those.
 
-# 5. Get tehe unique values
+# 5. Get tehe unique values from Stock code
 
 unique_values <- unique(data$StockCode)
 long_names <- unique(data$StockCode[nchar(data$StockCode) > 6])
@@ -96,16 +99,28 @@ summary(data)
 #Even if a customer buys 10 loaves of bread, it's still treated as: "Bread was bought."
 
 # 2. Remove cancelled transactions 
+
+# Filter rows that start with "C"
+sum(grepl("C", data$InvoiceNo))
+
 data <- data %>%
   filter(!grepl("C", InvoiceNo))
   
 # 3. Remove non product stock code transactions.
+
+print(nrow(data))
 
 bad_codes <- c('BANK CHARGES', 'POST', 'DOT', 'M', 'PADS', 'C2')
 
 data <- data %>%
   filter(!(StockCode %in% bad_codes))
   
+print(nrow(data))
+  
+# 4. Remove "Unspecified" Countries
+data <- data[data$Country != "Unspecified", ]
+  
+print(nrow(data))
 ########################################### FIND ANY FEATURE CORELLATIONS ############################################
 
 numeric_data <- data %>%
