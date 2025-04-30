@@ -1,0 +1,84 @@
+setwd("/Users/lolitha/Desktop/Assignment/Assignment_1")
+
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+# Load dataset
+data <- read.csv("vehicles.csv", header = TRUE)
+
+# Preview dataset
+head(data)
+dim(data)
+names(data)
+
+# 1. Missing values
+colSums(is.na(data))
+
+# 2. Summary
+summary(data)
+
+# 3. Remove missing values
+vehicles_clean <- na.omit(data)
+
+# 4. Detect and remove outliers using IQR
+
+#This is required because, PCA is based on variance and covariance
+#Outliers inflate variance, distorting the true structure of the data.
+#PCA may orient principal components toward those outliers.
+#This results in misleading directions (principal axes) and poor downstream clustering (e.g., with K-Means).
+#With outliers → PCs skewed toward a few distant points.
+#Without outliers → PCs more representative of the data cloud
+
+remove_outliers <- function(df) {
+  df_clean <- df
+  for (col in names(df_clean)) {
+    Q1 <- quantile(df_clean[[col]], 0.25, na.rm = TRUE)
+    Q3 <- quantile(df_clean[[col]], 0.75, na.rm = TRUE)
+    IQR_val <- Q3 - Q1
+    lower <- Q1 - 1.5 * IQR_val
+    upper <- Q3 + 1.5 * IQR_val
+    df_clean <- df_clean %>% filter(df_clean[[col]] >= lower & df_clean[[col]] <= upper)
+  }
+  return(df_clean)
+}
+
+numeric_features <- vehicles_clean %>% select(-class)
+features_no_outliers <- remove_outliers(numeric_features)
+
+# Add class column back to the dataset
+vehicles_no_outliers <- vehicles_clean %>%
+  filter(rownames(.) %in% rownames(features_no_outliers))
+  
+print(vehicles_no_outliers)
+
+# Scaling
+# Applies z-score scaling to all numeric features
+# Excludes the class column (since it's categorical)
+# After this, all features are on the same scale, and now:
+# - PCA won't be biased
+# - K-Means won’t treat large-scale features as more “important”
+features_scaled <- scale(vehicles_no_outliers %>% select(-class))
+labels <- vehicles_no_outliers$class
+
+# PCA Dimensionality Reduction
+#center = TRUE: subtracts the mean of each feature before PCA.
+#scale. = TRUE: divides by standard deviation (optional since scaled, but still ensures standardization).
+pca_result <- prcomp(features_scaled, center = TRUE, scale. = TRUE)
+summary(pca_result)
+
+# Scree plot
+fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 50))
+
+# Cumulative variance 
+cum_var <- cumsum(pca_result$sdev^2) / sum(pca_result$sdev^2)
+cum_var_df <- data.frame(PC = 1:length(cum_var), CumulativeVariance = cum_var)
+
+ggplot(cum_var_df, aes(x = PC, y = CumulativeVariance)) +
+  geom_line() +
+  geom_point() +
+  geom_hline(yintercept = 0.90, linetype = "dashed", color = "red") +
+  labs(title = "Cumulative Variance Explained by Principal Components",
+       y = "Cumulative Variance", x = "Number of Principal Components") +
+  theme_minimal()
