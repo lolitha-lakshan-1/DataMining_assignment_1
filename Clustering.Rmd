@@ -4,6 +4,7 @@ library(tidyverse)
 library(cluster)
 library(factoextra)
 library(ggplot2)
+library(GGally)
 
 # Load dataset
 data <- read.csv("vehicles.csv", header = TRUE)
@@ -82,3 +83,46 @@ ggplot(cum_var_df, aes(x = PC, y = CumulativeVariance)) +
   labs(title = "Cumulative Variance Explained by Principal Components",
        y = "Cumulative Variance", x = "Number of Principal Components") +
   theme_minimal()
+  
+#The red dashed line is at 0.90 cumulative variance.
+#The black curve crosses 0.90 somewhere between PC 4 and PC 5.
+#Means:
+#PC1–PC4 < 90%
+#PC1–PC5 ≥ 90%
+  
+pca_selected <- pca_result$x[, 1:5]
+
+#  visualization of first 2 PCs
+pca_data <- as.data.frame(pca_result$x)
+pca_data$class <- labels
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = class)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "PCA of Vehicle Features", x = "PC1", y = "PC2") +
+  theme_minimal()
+
+# Determine optimal number of clusters using Elbow Method
+fviz_nbclust(pca_selected, kmeans, method = "wss")
+
+# Apply K-Means
+set.seed(123)
+kmeans_result <- kmeans(pca_selected, centers = 4, nstart = 25)
+
+# Add cluster info to PCA data for plotting
+pca_data$cluster <- as.factor(kmeans_result$cluster)
+
+# Visualize Clusters in PCA space
+ggplot(pca_data, aes(x = PC1, y = PC2, color = cluster, shape = class)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "K-Means Clustering on PCA-Reduced Data", x = "PC1", y = "PC2") +
+  theme_minimal()
+
+# Cluster Profiling
+vehicles_no_outliers$cluster <- kmeans_result$cluster
+cluster_means <- vehicles_no_outliers %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), mean))
+print(cluster_means)
+
+# Compare Clusters with Actual Classes
+print(table(Cluster = vehicles_no_outliers$cluster, Class = vehicles_no_outliers$class))
