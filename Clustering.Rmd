@@ -14,6 +14,8 @@ head(data)
 dim(data)
 names(data)
 
+print(nrow(data))
+
 # 1. Missing values
 colSums(is.na(data))
 
@@ -22,6 +24,8 @@ summary(data)
 
 # 3. Remove missing values
 vehicles_clean <- na.omit(data)
+
+print(nrow(vehicles_clean))
 
 # 4. Detect and remove outliers using IQR
 
@@ -68,6 +72,7 @@ labels <- vehicles_no_outliers$class
 #scale. = TRUE: divides by standard deviation (optional since scaled, but still ensures standardization).
 pca_result <- prcomp(features_scaled, center = TRUE, scale. = TRUE)
 summary(pca_result)
+print(pca_result$rotation)
 
 # Scree plot
 fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 50))
@@ -122,7 +127,7 @@ vehicles_no_outliers$cluster <- kmeans_result$cluster
 cluster_means <- vehicles_no_outliers %>%
   group_by(cluster) %>%
   summarise(across(where(is.numeric), mean))
-print(cluster_means)
+print(cluster_means, width = Inf)
 
 # Compare Clusters with Actual Classes
 print(table(Cluster = vehicles_no_outliers$cluster, Class = vehicles_no_outliers$class))
