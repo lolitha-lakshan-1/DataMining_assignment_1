@@ -131,3 +131,35 @@ print(cluster_means, width = Inf)
 
 # Compare Clusters with Actual Classes
 print(table(Cluster = vehicles_no_outliers$cluster, Class = vehicles_no_outliers$class))
+
+############################################## Hierarchical Clustering after PCA (R) ###############################################
+
+
+# Compute distance
+# Euclidean distance reflects how far two points are from each other in terms of overall variance-base and data is continous
+distance_matrix <- dist(pca_selected, method = "euclidean")
+
+#Agglomerative Clustering
+# Ward method works only with squared Euclidean distances
+hc <- hclust(distance_matrix, method = "ward.D2")
+
+#Plot the Dendrogram
+plot(hc, labels = FALSE, hang = -1, main = "Hierarchical Clustering Dendrogram")
+
+#Cut Dendrogram into k Clusters
+cluster_cut <- cutree(hc, k = 4)
+
+# Plot PCA
+pca_df <- as.data.frame(pca_selected)
+pca_df$cluster <- factor(cluster_cut)
+pca_df$class <- vehicles_no_outliers$class
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = cluster, shape = class)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "Hierarchical Clustering (Ward) on PCA-Reduced Data",
+       x = "PC1", y = "PC2") +
+  theme_minimal()
+  
+# Confusion Matrix
+table(Cluster = pca_df$cluster, Class = pca_df$class)
+
