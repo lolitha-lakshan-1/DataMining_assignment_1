@@ -68,6 +68,21 @@ remove_outliers <- function(df) {
 numeric_features <- vehicles_clean %>% select(-class)
 features_no_outliers <- remove_outliers(numeric_features)
 
+outlier_counts <- sapply(numeric_features, function(column) {
+  Q1 <- quantile(column, 0.25, na.rm = TRUE)
+  Q3 <- quantile(column, 0.75, na.rm = TRUE)
+  IQR_val <- Q3 - Q1
+  lower <- Q1 - 1.5 * IQR_val
+  upper <- Q3 + 1.5 * IQR_val
+  sum(column < lower | column > upper, na.rm = TRUE)
+})
+
+# Convert to data frame for printing
+outlier_counts_df <- data.frame(Feature = names(outlier_counts),
+                                Outlier_Count = outlier_counts)
+
+print(outlier_counts_df)
+
 # Add row ID for reshaping
 features_no_outliers_long <- features_no_outliers %>%
   mutate(row_id = row_number()) %>%
