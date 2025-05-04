@@ -44,6 +44,7 @@ ggplot(numeric_long, aes(x = Feature, y = Value)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Boxplot of Features (Before Outlier Removal)", y = "Value", x = "Feature")
 
+################## outlier handling ##############
 #This is required because, PCA is based on variance and covariance
 #Outliers inflate variance, distorting the true structure of the data.
 #PCA may orient principal components toward those outliers.
