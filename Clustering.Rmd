@@ -22,12 +22,27 @@ colSums(is.na(data))
 # 2. Summary
 summary(data)
 
+print(nrow(data))
 # 3. Remove missing values
 vehicles_clean <- na.omit(data)
+
 
 print(nrow(vehicles_clean))
 
 # 4. Detect and remove outliers using IQR
+
+#Display Outliers
+numeric_features_with_outliers <- vehicles_clean %>% select(-class)
+
+numeric_long <- numeric_features_with_outliers %>%
+  mutate(row_id = row_number()) %>%
+  pivot_longer(-row_id, names_to = "Feature", values_to = "Value")
+  
+ggplot(numeric_long, aes(x = Feature, y = Value)) +
+  geom_boxplot(outlier.colour = "red", outlier.alpha = 0.6) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Boxplot of Features (Before Outlier Removal)", y = "Value", x = "Feature")
 
 #This is required because, PCA is based on variance and covariance
 #Outliers inflate variance, distorting the true structure of the data.
@@ -51,6 +66,21 @@ remove_outliers <- function(df) {
 
 numeric_features <- vehicles_clean %>% select(-class)
 features_no_outliers <- remove_outliers(numeric_features)
+
+# Add row ID for reshaping
+features_no_outliers_long <- features_no_outliers %>%
+  mutate(row_id = row_number()) %>%
+  pivot_longer(-row_id, names_to = "Feature", values_to = "Value")
+
+# Plot boxplots after outlier removal
+ggplot(features_no_outliers_long, aes(x = Feature, y = Value)) +
+  geom_boxplot(fill = "skyblue", outlier.shape = NA) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Boxplot of Features (After Outlier Removal)",
+       x = "Feature", y = "Value")
+
+print(nrow(features_no_outliers))
 
 # Add class column back to the dataset
 vehicles_no_outliers <- vehicles_clean %>%
