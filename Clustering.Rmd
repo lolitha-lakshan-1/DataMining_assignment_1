@@ -5,6 +5,7 @@ library(cluster)
 library(factoextra)
 library(ggplot2)
 library(GGally)
+library(mice)
 
 # Load dataset
 data <- read.csv("vehicles.csv", header = TRUE)
@@ -21,17 +22,22 @@ colSums(is.na(data))
 
 # 2. Summary
 summary(data)
-
 print(nrow(data))
-# 3. Remove missing values
-vehicles_clean <- na.omit(data)
 
+# 3. Replace missing values 
+class_labels <- data$class
+data_features <- data %>% select(-class)
+imputed <- mice(data_features, method = "mean", m = 1, maxit = 1, seed = 123)
+completed_data <- complete(imputed, 1)
+vehicles_clean <- completed_data
+vehicles_clean$class <- class_labels
 
 print(nrow(vehicles_clean))
 
-# 4. Detect and remove outliers using IQR
+# 4. Display Outliers
 
-#Display Outliers
+summary(data)
+
 numeric_features_with_outliers <- vehicles_clean %>% select(-class)
 
 numeric_long <- numeric_features_with_outliers %>%
@@ -44,31 +50,8 @@ ggplot(numeric_long, aes(x = Feature, y = Value)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Boxplot of Features (Before Outlier Removal)", y = "Value", x = "Feature")
 
-################## outlier handling ##############
-#This is required because, PCA is based on variance and covariance
-#Outliers inflate variance, distorting the true structure of the data.
-#PCA may orient principal components toward those outliers.
-#This results in misleading directions (principal axes) and poor downstream clustering (e.g., with K-Means).
-#With outliers → PCs skewed toward a few distant points.
-#Without outliers → PCs more representative of the data cloud
-
-remove_outliers <- function(df) {
-  df_clean <- df
-  for (col in names(df_clean)) {
-    Q1 <- quantile(df_clean[[col]], 0.25, na.rm = TRUE)
-    Q3 <- quantile(df_clean[[col]], 0.75, na.rm = TRUE)
-    IQR_val <- Q3 - Q1
-    lower <- Q1 - 1.5 * IQR_val
-    upper <- Q3 + 1.5 * IQR_val
-    df_clean <- df_clean %>% filter(df_clean[[col]] >= lower & df_clean[[col]] <= upper)
-  }
-  return(df_clean)
-}
-
-numeric_features <- vehicles_clean %>% select(-class)
-features_no_outliers <- remove_outliers(numeric_features)
-
-outlier_counts <- sapply(numeric_features, function(column) {
+# find outlier counts
+outlier_counts <- sapply(numeric_features_with_outliers, function(column) {
   Q1 <- quantile(column, 0.25, na.rm = TRUE)
   Q3 <- quantile(column, 0.75, na.rm = TRUE)
   IQR_val <- Q3 - Q1
@@ -77,18 +60,33 @@ outlier_counts <- sapply(numeric_features, function(column) {
   sum(column < lower | column > upper, na.rm = TRUE)
 })
 
-# Convert to data frame for printing
 outlier_counts_df <- data.frame(Feature = names(outlier_counts),
                                 Outlier_Count = outlier_counts)
-
 print(outlier_counts_df)
 
-# Add row ID for reshaping
-features_no_outliers_long <- features_no_outliers %>%
+# Cap Outliers
+cap_outliers <- function(df) {
+  df_capped <- df
+  for (col in names(df_capped)) {
+    Q1 <- quantile(df_capped[[col]], 0.25, na.rm = TRUE)
+    Q3 <- quantile(df_capped[[col]], 0.75, na.rm = TRUE)
+    IQR_val <- Q3 - Q1
+    lower <- Q1 - 1.5 * IQR_val
+    upper <- Q3 + 1.5 * IQR_val
+    
+    df_capped[[col]][df_capped[[col]] < lower] <- lower
+    df_capped[[col]][df_capped[[col]] > upper] <- upper
+  }
+  return(df_capped)
+}
+
+features_capped <- cap_outliers(numeric_features_with_outliers)
+
+features_no_outliers_long <- features_capped %>%
   mutate(row_id = row_number()) %>%
   pivot_longer(-row_id, names_to = "Feature", values_to = "Value")
 
-# Plot boxplots after outlier removal
+# Plot boxplots after capping outliers
 ggplot(features_no_outliers_long, aes(x = Feature, y = Value)) +
   geom_boxplot(fill = "skyblue", outlier.shape = NA) +
   theme_minimal() +
@@ -96,22 +94,14 @@ ggplot(features_no_outliers_long, aes(x = Feature, y = Value)) +
   labs(title = "Boxplot of Features (After Outlier Removal)",
        x = "Feature", y = "Value")
 
-print(nrow(features_no_outliers))
-
-# Add class column back to the dataset
-vehicles_no_outliers <- vehicles_clean %>%
-  filter(rownames(.) %in% rownames(features_no_outliers))
-  
-print(vehicles_no_outliers)
-
 # Scaling
 # Applies z-score scaling to all numeric features
 # Excludes the class column (since it's categorical)
 # After this, all features are on the same scale, and now:
 # - PCA won't be biased
 # - K-Means won’t treat large-scale features as more “important”
-features_scaled <- scale(vehicles_no_outliers %>% select(-class))
-labels <- vehicles_no_outliers$class
+features_scaled <- scale(features_capped)
+print(features_scaled)
 
 # PCA Dimensionality Reduction
 #center = TRUE: subtracts the mean of each feature before PCA.
@@ -140,17 +130,6 @@ ggplot(cum_var_df, aes(x = PC, y = CumulativeVariance)) +
 #Means:
 #PC1–PC4 < 90%
 #PC1–PC5 ≥ 90%
-  
-pca_selected <- pca_result$x[, 1:5]
-
-#  visualization of first 2 PCs
-pca_data <- as.data.frame(pca_result$x)
-pca_data$class <- labels
-
-ggplot(pca_data, aes(x = PC1, y = PC2, color = class)) +
-  geom_point(alpha = 0.7) +
-  labs(title = "PCA of Vehicle Features", x = "PC1", y = "PC2") +
-  theme_minimal()
 
 # Determine optimal number of clusters using Elbow Method
 fviz_nbclust(pca_selected, kmeans, method = "wss")
@@ -169,14 +148,14 @@ ggplot(pca_data, aes(x = PC1, y = PC2, color = cluster, shape = class)) +
   theme_minimal()
 
 # Cluster Profiling
-vehicles_no_outliers$cluster <- kmeans_result$cluster
-cluster_means <- vehicles_no_outliers %>%
+features_capped$cluster <- kmeans_result$cluster
+cluster_means <- features_capped %>%
   group_by(cluster) %>%
   summarise(across(where(is.numeric), mean))
 print(cluster_means, width = Inf)
 
 # Compare Clusters with Actual Classes
-print(table(Cluster = vehicles_no_outliers$cluster, Class = vehicles_no_outliers$class))
+print(table(Cluster = features_capped$cluster, Class = vehicles_clean$class))
 
 ############################################## Hierarchical Clustering after PCA (R) ###############################################
 
@@ -192,13 +171,15 @@ hc <- hclust(distance_matrix, method = "ward.D2")
 #Plot the Dendrogram
 plot(hc, labels = FALSE, hang = -1, main = "Hierarchical Clustering Dendrogram")
 
+rect.hclust(hc, k = 4, border = 2:5)
+
 #Cut Dendrogram into k Clusters
 cluster_cut <- cutree(hc, k = 4)
 
 # Plot PCA
 pca_df <- as.data.frame(pca_selected)
 pca_df$cluster <- factor(cluster_cut)
-pca_df$class <- vehicles_no_outliers$class
+pca_df$class <- vehicles_clean$class
 
 ggplot(pca_df, aes(x = PC1, y = PC2, color = cluster, shape = class)) +
   geom_point(alpha = 0.7) +
