@@ -93,6 +93,13 @@ ggplot(features_no_outliers_long, aes(x = Feature, y = Value)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Boxplot of Features (After Outlier Removal)",
        x = "Feature", y = "Value")
+       
+#Data Corelatoins
+plot_data <- data.frame(features_capped, class = vehicles_clean$class)
+
+ggpairs(plot_data, aes(color = class)) +
+  ggtitle("Pair Plot - All Numeric Features")
+    
 
 # Scaling
 # Applies z-score scaling to all numeric features
